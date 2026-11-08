@@ -1,0 +1,14 @@
+# Run outputs (made by the scripts; see README)
+/outputs/
+
+# Python
+__pycache__/
+.ruff_cache/
+*.py[cod]
+*.egg-info/
+.venv*/
+
+# Caches and the two forks that scripts/setup.sh clones
+/.cache/
+/dsrl_pi0/openpi/
+/dsrl_pi0/LIBERO/

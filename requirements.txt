@@ -1,0 +1,4 @@
+# CPU analysis (python -m ckpt_selection.results). scripts/setup.sh installs the GPU stack for
+# training and evaluation.
+numpy==2.4.6              # all ckpt_selection analysis modules
+scipy==1.17.1             # ckpt_selection.stats (rank correlations, binomial, normal quantiles)

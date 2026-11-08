@@ -1,0 +1,357 @@
+# Every run, schedule, seed pool, threshold and hyperparameter of the paper.
+# No other file holds these values. Comments name the place in the paper that states each one.
+# Rates are fractions in output files. Thresholds that the paper gives in points stay in points,
+# except oracle_bias_shrink_band, which is a fraction because the code compares it with rates.
+
+[paths]
+outputs = "outputs"                  # run outputs, relative to the repo root (see README)
+
+[upstream]                           # setup.sh reads the forks; agent.py reads the pi0 keys
+openpi_repo = "https://github.com/nakamotoo/openpi"
+openpi_commit = "a6d2400d2534ce32e7bdf8747709b97aaef8ec04"  # dsrl_pi0's submodule pin
+libero_repo = "https://github.com/nakamotoo/LIBERO"
+libero_commit = "87edbd1b823e464bc66557d213cc45e9f88aa543"  # dsrl_pi0's submodule pin
+pi0_config = "pi0_libero"            # Sec. 3 "the publicly available LIBERO checkpoint of pi0"
+pi0_checkpoint = "s3://openpi-assets/checkpoints/pi0_libero"
+
+# Table 2. train-flags passes every key as a flag of launch_train_sim.py. The values equal the
+# DSRL authors' examples/scripts/run_libero.sh, or the defaults of launch_train_sim.py where that
+# script sets none, except log_interval and eval_episodes (see their comments).
+[training]
+env = "libero"                       # simulator suite (Sec. 3 "LIBERO")
+max_steps = 500_000                  # Table 2 "training length"; Sec. 3 "500k gradient steps"
+checkpoint_steps = [                 # Table 2, the two "checkpoints" rows; Sec. 3 "18 checkpoints"
+    1_000, 2_500, 5_000, 10_000, 20_000, 35_000, 50_000, 75_000,
+    100_000, 150_000, 200_000, 250_000, 300_000, 350_000, 400_000, 450_000, 475_000, 500_000,
+]
+batch_size = 256                     # Table 2 "batch size"
+discount = 0.999                     # per simulator step; Table 2 gives 0.999^20 per decision
+query_freq = 20                      # Sec. 3 "one decision every 20 simulator steps"
+multi_grad_step = 20                 # Table 2 "gradient steps per decision"
+tau = 0.005                          # Table 2 "target-network rate"
+actor_lr = 1e-4                      # Table 2 "actor learning rate"
+critic_lr = 3e-4                     # Table 2 "critic learning rate"
+num_qs = 10                          # Table 2 "critic ensemble size"
+critic_reduction = "mean"            # Table 2 "critic head reduction"
+target_entropy = "auto"              # Table 2 "temperature: automatic"
+resize_image = 64                    # Table 2 "camera image 64x64 pixels"
+add_states = 1                       # Table 2 "proprioceptive state, 8-dimensional"
+start_online_updates = 500           # upstream examples/scripts/run_libero.sh (not in Table 2)
+action_magnitude = 1.0               # upstream run_libero.sh (not in Table 2)
+hidden_dims = [128]                  # upstream run_libero.sh: one hidden layer of 128 units
+log_interval = 5_000                 # training-log spacing (App. E; Fig. 7 "logged every 5k");
+                                     # run_libero.sh uses 500
+eval_episodes = 1                    # one upstream evaluation episode at step 0 (run_libero.sh:
+                                     # 10); the dsrl_pi0 loop has no periodic evaluation
+
+[evaluation]                         # Sec. 3 "Evaluation", Table 2
+episode_limit = 400                  # Table 2 "episode limit"; equals upstream train_sim.py
+render_resolution = 256              # camera resolution; equals upstream train_sim.py
+agent_seed = 0                       # seed of the rebuilt actor's sampling RNG, reset at every
+                                     # checkpoint restore
+scan = { seed_base = 10_000, episodes = 50 }      # Sec. 3 "scan every checkpoint on 50 episodes"
+confirm = { seed_base = 50_000, episodes = 200 }  # Sec. 3 "confirm ... on 200"; disjoint from scan
+
+[screen]                             # App. A "Task selection", Table 3
+band = [0.20, 0.60]                  # App. A "a base-policy success rate of 20-60%"
+
+[screen.libero_10]                   # App. A: all LIBERO-Long tasks on 50 episodes (Table 3)
+stages = [{ seed_base = 90_000, episodes = 50 }]
+
+[screen.libero_90]                   # App. A: all LIBERO-90 tasks on 20 episodes, then the tasks
+stages = [                           # inside the band rechecked on 50 new episodes
+    { seed_base = 90_000, episodes = 20 },
+    { seed_base = 95_000, episodes = 50 },
+]
+
+[heldout]                            # App. C "Definitions"
+demos = 10                           # 100 states = 10 demonstrations x 10 states
+states_per_demo = 10
+samples_per_state = 8                # App. C "eight sampled prefixes"
+base_sample_seed = 1234              # RNG seed of the base policy's sampled prefixes
+plateau_start = 35_000               # Table 5 "checkpoints at 35k steps or later"
+
+[selectors]                          # Sec. 3 "Selectors"
+restricted_min_step = 100_000        # "checkpoints saved at 100k steps or later"
+spread_veto_mads = 2.5               # "more than 2.5 median absolute deviations" (raw MAD)
+tie_rule = "earliest"                # Table 1 caption; App. G "ties broken toward the earliest"
+practice_window = 40_000             # S_40k, Sec. 3 and App. G
+kumar_min_step = 100_000             # App. E "if the peak is the highest value from 100k on"
+kumar_last_checkpoints = 3           # App. E "one of the last three checkpoints"
+practice_sensitivity_windows = [20_000, 80_000]   # App. G
+window_choice_outcomes = [3, 5, 8, 10]            # App. G "windows of 3, 5, 8 and 10 outcomes"
+distance_statistics = ["l2", "kl", "mmd"]         # App. C "L2, KL and MMD"
+distance_min_steps = [0, 35_000, 100_000]         # App. C "all, 35k or later, 100k or later"
+distance_directions = ["min", "max"]              # App. C "highest or lowest"
+
+[protocol]                           # Sec. 3 "Evaluation", App. B
+regret_floor = 10                    # "the 10-point floor"
+drop_points = 15                     # drops that enter a confirm set (App. B) and drops of the
+                                     # drop screen (App. A "falls by more than 15 points and then
+                                     # rises again")
+collapse_points = 15                 # "a confirmed drop of more than 15 points from a
+                                     # competent checkpoint"
+below_base_ses = 2                   # App. C "below the base policy's scan success by at least two
+                                     # standard errors"
+oracle_bias_shrink_band = 0.15       # fraction: App. B "within 15 points of each other"
+
+[practice_criteria]                  # Sec. 4.4, App. G
+min_median_partial_rho = 0.30        # "a median over runs of at least +0.30"
+max_selected_regret = 20             # "no selected checkpoint more than 20 points below"
+stricter_margin_over_step = 0.3      # "exceed the training step's by at least 0.3"
+min_runs_with_large_regret = 3       # "only if at least three runs have R_last >= 10"
+expected_regret_margin = 10          # App. G "stays within 10 points of the final checkpoint's"
+
+[scan_bias]                          # App. F
+confirm_rule = "late_drops"          # "the eight earlier runs whose confirm sets follow one rule"
+reference_rate = 0.5                 # "the standard error of scan success near 50%"
+
+[softopc]                            # App. D
+# "the base policy and the checkpoints at 35k, 150k, 500k"
+pool_sources = [-1, 35_000, 150_000, 500_000]
+episodes_per_source = 60             # "60 from each of four policies"
+pool_seed_base = 90_000              # disjoint from the scan and confirm pools; shares initial
+                                     # states with the first task-screen stage, which only
+                                     # picks tasks
+min_per_class = 40                   # "our minimum of 40 successes and 40 failures"
+score_batch = 512                    # bounds memory during critic inference only
+
+[confirm_rules]                      # App. B "Confirm sets"; Algorithm 1 line 4; drops use
+                                     # [protocol] drop_points
+around_drops = {}                                   # the approximate rerun and its original
+late_drops = { start_step = 300_000, cap = 6 }      # the other earlier runs
+practice = { start_step = 350_000, cap = 5 }        # the replication runs
+control = {}                                        # a control run: the held-out picks only
+listed = {}                                         # the runs with a confirm_steps list
+
+# One [[runs]] table per run. Keys:
+#   tag              output folder name under outputs/
+#   suite, task      LIBERO suite and task id
+#   seed             training seed
+#   role             "earlier" | "replication" | "control" | "drop_screen"
+#   confirm_rule     key of [confirm_rules]; absent for drop_screen runs
+#   confirm_steps    optional: the checkpoints to confirm besides the final and the
+#                    highest-scanning one (confirm_rule "listed" only). We chose these lists by
+#                    hand for control tasks 28 and 55 (App. B "The three control runs use
+#                    shorter lists").
+#   top_scan         optional: also confirm this many highest-scanning checkpoints
+#                    (confirm_rule "around_drops" only)
+#   rerun_of         optional: tag of the run this one repeats with the same configuration
+#   max_steps        optional: shorter training for drop_screen runs (App. A "for 100k steps each")
+#   practice_source  optional: "train_log" (one outcome per log interval, as App. G uses on the
+#                    approximate rerun) or "episodes" (practice_episodes.jsonl, the replication
+#                    runs)
+#   stages           evaluation stages, in run order. The analysis takes its run sets from these
+#                    lists, never from which files exist: held-out statistics (Sec. 3), training
+#                    logs (App. E) and a SoftOPC pool (App. D) on the runs whose list holds
+#                    "heldout", "train_log" or "softopc".
+
+[[runs]]
+tag = "task8_seed00"
+suite = "libero_10"
+task = 8
+seed = 0
+role = "earlier"
+confirm_rule = "around_drops"
+top_scan = 5
+stages = ["scan", "confirm_set", "confirm"]
+
+[[runs]]
+tag = "task8_seed00_rerun"           # the approximate rerun (Sec. 3)
+suite = "libero_10"
+task = 8
+seed = 0
+role = "earlier"
+confirm_rule = "around_drops"
+rerun_of = "task8_seed00"
+practice_source = "train_log"
+stages = ["scan", "heldout", "confirm_set", "confirm", "softopc", "train_log"]
+
+[[runs]]
+tag = "task8_seed01"
+suite = "libero_10"
+task = 8
+seed = 1
+role = "earlier"
+confirm_rule = "late_drops"
+stages = ["scan", "heldout", "confirm_set", "confirm"]
+
+[[runs]]
+tag = "task8_seed02"
+suite = "libero_10"
+task = 8
+seed = 2
+role = "earlier"
+confirm_rule = "late_drops"
+stages = ["scan", "heldout", "confirm_set", "confirm"]
+
+[[runs]]
+tag = "task8_seed03"
+suite = "libero_10"
+task = 8
+seed = 3
+role = "earlier"
+confirm_rule = "late_drops"
+stages = ["scan", "heldout", "confirm_set", "confirm"]
+
+[[runs]]
+tag = "task8_seed04"
+suite = "libero_10"
+task = 8
+seed = 4
+role = "earlier"
+confirm_rule = "late_drops"
+stages = ["scan", "heldout", "confirm_set", "confirm"]
+
+[[runs]]
+tag = "task8_seed05"
+suite = "libero_10"
+task = 8
+seed = 5
+role = "earlier"
+confirm_rule = "late_drops"
+stages = ["scan", "heldout", "confirm_set", "confirm"]
+
+[[runs]]
+tag = "task8_seed06"
+suite = "libero_10"
+task = 8
+seed = 6
+role = "earlier"
+confirm_rule = "late_drops"
+stages = ["scan", "heldout", "confirm_set", "confirm"]
+
+[[runs]]
+tag = "task8_seed07"
+suite = "libero_10"
+task = 8
+seed = 7
+role = "earlier"
+confirm_rule = "late_drops"
+stages = ["scan", "heldout", "confirm_set", "confirm"]
+
+[[runs]]
+tag = "task8_seed08"
+suite = "libero_10"
+task = 8
+seed = 8
+role = "earlier"
+confirm_rule = "late_drops"
+stages = ["scan", "heldout", "confirm_set", "confirm"]
+
+[[runs]]
+tag = "task8_seed09"
+suite = "libero_10"
+task = 8
+seed = 9
+role = "replication"
+confirm_rule = "practice"
+practice_source = "episodes"
+stages = ["scan", "confirm_set", "confirm", "train_log"]
+
+[[runs]]
+tag = "task8_seed10"
+suite = "libero_10"
+task = 8
+seed = 10
+role = "replication"
+confirm_rule = "practice"
+practice_source = "episodes"
+stages = ["scan", "confirm_set", "confirm", "train_log"]
+
+[[runs]]
+tag = "task8_seed11"
+suite = "libero_10"
+task = 8
+seed = 11
+role = "replication"
+confirm_rule = "practice"
+practice_source = "episodes"
+stages = ["scan", "confirm_set", "confirm", "train_log"]
+
+[[runs]]
+tag = "task8_seed12"
+suite = "libero_10"
+task = 8
+seed = 12
+role = "replication"
+confirm_rule = "practice"
+practice_source = "episodes"
+stages = ["scan", "confirm_set", "confirm", "train_log"]
+
+[[runs]]
+tag = "task8_seed13"
+suite = "libero_10"
+task = 8
+seed = 13
+role = "replication"
+confirm_rule = "practice"
+practice_source = "episodes"
+stages = ["scan", "confirm_set", "confirm", "train_log"]
+
+[[runs]]
+tag = "task8_seed14"
+suite = "libero_10"
+task = 8
+seed = 14
+role = "replication"
+confirm_rule = "practice"
+practice_source = "episodes"
+stages = ["scan", "confirm_set", "confirm", "train_log"]
+
+[[runs]]
+tag = "task28_seed00"
+suite = "libero_90"
+task = 28
+seed = 0
+role = "control"
+confirm_rule = "listed"
+confirm_steps = [100_000]            # chosen by hand
+stages = ["scan", "heldout", "confirm_set", "confirm"]
+
+[[runs]]
+tag = "task55_seed00"
+suite = "libero_90"
+task = 55
+seed = 0
+role = "control"
+confirm_rule = "listed"
+confirm_steps = [35_000, 100_000, 450_000, 475_000]  # chosen by hand
+stages = ["scan", "heldout", "confirm_set", "confirm", "softopc"]
+
+[[runs]]
+tag = "task57_seed00"
+suite = "libero_90"
+task = 57
+seed = 0
+role = "control"
+confirm_rule = "control"
+stages = ["scan", "heldout", "confirm_set", "confirm"]
+
+# Drop-screen runs, App. A "Screening for drops on other tasks": 100k steps, scan only.
+[[runs]]
+tag = "task57_seed00_screen"
+suite = "libero_90"
+task = 57
+seed = 0
+role = "drop_screen"
+max_steps = 100_000
+stages = ["scan"]
+
+[[runs]]
+tag = "task29_seed00_screen"
+suite = "libero_90"
+task = 29
+seed = 0
+role = "drop_screen"
+max_steps = 100_000
+stages = ["scan"]
+
+[[runs]]
+tag = "task46_seed00_screen"
+suite = "libero_90"
+task = 46
+seed = 0
+role = "drop_screen"
+max_steps = 100_000
+stages = ["scan"]
